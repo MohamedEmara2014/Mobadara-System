@@ -1,72 +1,78 @@
 import streamlit as st
 import pandas as pd
 import requests
+import json
 
-# 1. إعدادات واجهة الموبايل والكمبيوتر
-st.set_page_config(page_title="منظومة المبادرة المركزية", layout="wide")
+# 1. إعدادات الصفحة للعرض العريض (مناسب للجداول)
+st.set_page_config(page_title="مصفوفة المبادرة - تحديث الأقسام", layout="wide")
 
-# 2. الروابط الخاصة بك (تم وضع رابط الـ Exec الجديد)
-SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwyEp27smOcrwmKKehIAn6LGlOGooOPjKFvuHjjlQkthv91QxMAfMoixD4QzHJ_L8P9/exec"
+# 2. الروابط المحدثة
+SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzM8gX9uZz9CXTi1zsBH1qO3-4vAfnn8wRhv8wzqg7RXlv2roPYpOupEDOW3oCzVcI/exec"
 SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1YDgqz1oi8Yi56DFFp03LlMWhmJxo1MeuSN_2hGSB2EM/export?format=csv"
 
-st.title("🏗️ مصفوفة المتابعة المركزية - 26 مشروعاً")
-st.markdown("---")
+st.title("📂 نظام تحديث مصفوفة الأقسام (الـ 26 مشروعاً)")
+st.info("اختر قسمك، عدل البيانات في الجدول، ثم اضغط 'اعتماد التحديثات' لإرسال الكل دفعة واحدة.")
 
 try:
-    # سحب البيانات الحالية لعرضها
-    # نستخدم dtype=str لمنع أخطاء الأرقام والنصوص العربية
+    # جلب البيانات الحالية
     df = pd.read_csv(SHEET_CSV_URL, dtype=str).fillna("")
 
-    # --- نافذة تحديث البيانات ---
-    with st.container(border=True):
-        st.subheader("📝 تحديث موقف تنفيذي جديد")
-        with st.form("main_form", clear_on_submit=True):
-            col1, col2 = st.columns(2)
-            with col1:
-                project = st.selectbox("اسم المشروع:", df.iloc[:, 0].unique())
-            with col2:
-                section = st.selectbox("القسم/المرحلة:", df.columns[1:])
-            
-            new_status = st.text_input("الموقف الحالي (اكتب التحديث هنا):")
-            
-            submitted = st.form_submit_button("إرسال التحديث للمدير العام ✅")
-
-            if submitted:
-                if new_status:
-                    # حساب موقع الخلية بدقة مهنية
-                    # +2 لأن جوجل شيتس يبدأ العد من 1 وهناك سطر عناوين
-                    row_index = list(df.iloc[:, 0]).index(project) + 2
-                    col_index = list(df.columns).index(section) + 1
-                    
-                    # إرسال البيانات عبر "الجسر" البرمجي (Apps Script)
-                    payload = {
-                        "row": row_index,
-                        "col": col_index,
-                        "val": new_status
-                    }
-                    
-                    with st.spinner("جاري المزامنة مع ملف المدير..."):
-                        res = requests.get(SCRIPT_URL, params=payload)
-                    
-                    if res.status_code == 200:
-                        st.success(f"تم التحديث بنجاح: {project} ⮕ {section}")
-                        st.balloons()
-                    else:
-                        st.error("فشل التحديث. تأكد أن رابط الـ Web App مفعل لـ Anyone.")
-                else:
-                    st.warning("يرجى كتابة نص التحديث أولاً.")
-
-    # --- عرض الجدول الشامل للمدير ---
-    st.markdown("### 📊 المصفوفة الختامية للمشاريع")
+    # --- الخطوة 1: اختيار القسم ---
+    # نفترض أن العمود الأول هو أسماء المشاريع والبقية هي الأقسام
+    project_col = df.columns[0]
+    sections = df.columns[1:]
     
-    # ميزة البحث السريع بالاسم
-    search = st.text_input("🔍 بحث سريع عن مشروع:")
-    if search:
-        display_df = df[df.iloc[:, 0].str.contains(search, na=False)]
-    else:
-        display_df = df
+    selected_section = st.selectbox("🎯 اختر القسم الخاص بك:", sections)
+    col_idx = list(df.columns).index(selected_section) + 1
 
-    st.dataframe(display_df, use_container_width=True, height=500)
+    # --- الخطوة 2: محرر البيانات التفاعلي ---
+    st.subheader(f"📊 جدول تحديثات قسم: {selected_section}")
+    
+    # تجهيز جدول فرعي للعرض والتعديل فقط
+    # يحتوي على اسم المشروع والعمود الخاص بالقسم المختار فقط
+    display_df = df[[project_col, selected_section]].copy()
+    
+    edited_df = st.data_editor(
+        display_df,
+        column_config={
+            project_col: st.column_config.TextColumn("اسم المشروع", disabled=True),
+            selected_section: st.column_config.TextColumn(f"الموقف الحالي لـ {selected_section}", width="large")
+        },
+        hide_index=True,
+        use_container_width=True,
+        height=500
+    )
+
+    # --- الخطوة 3: زر الإرسال الجماعي ---
+    st.divider()
+    if st.button(f"🚀 اعتماد وإرسال كافة تحديثات {selected_section}", type="primary"):
+        updates_to_send = []
+        
+        # مقارنة الجدول المعدل بالقديم لاستخراج التغييرات فقط
+        for i in range(len(df)):
+            new_val = edited_df.iloc[i, 1]
+            old_val = df.iloc[i, col_idx - 1]
+            
+            if str(new_val).strip() != str(old_val).strip():
+                updates_to_send.append({
+                    "row": i + 2, # +2 لتعويض سطر العناوين وبدء العد من 1 في جوجل
+                    "col": col_idx,
+                    "val": str(new_val)
+                })
+        
+        if updates_to_send:
+            with st.spinner(f"جاري مزامنة {len(updates_to_send)} تحديثاً مع ملف المدير العام..."):
+                # إرسال التحديثات كـ JSON لتوافق الكود الجديد في Apps Script
+                params = {"updates": json.dumps(updates_to_send)}
+                response = requests.get(SCRIPT_URL, params=params)
+                
+                if response.status_code == 200:
+                    st.success(f"✅ تم تحديث {len(updates_to_send)} خلية بنجاح في ملف المدير العام!")
+                    st.balloons()
+                else:
+                    st.error("❌ حدث خطأ في السيرفر. تأكد من إعدادات الـ Deployment.")
+        else:
+            st.warning("⚠️ لم تقم بإجراء أي تغييرات في الجدول لإرسالها.")
 
 except Exception as e:
-    st.error(f"خطأ في تحميل البيانات: {e}")
+    st.error(f"حدث خطأ غير متوقع: {e}")
