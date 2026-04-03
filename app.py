@@ -18,7 +18,7 @@ try:
     df_raw = pd.read_csv(SHEET_CSV_URL, dtype=str).fillna("")
     sections = df_raw.columns[1:]
     
-    selected_section = st.selectbox("🎯 حدد القسم الخاص بك:", sections)
+    selected_section = st.selectbox("🎯 حدد القسم الخاص بك ثم اضغط اعتماد وتصدير البيانات أسفل الصفحة:", sections)
     col_idx = list(df_raw.columns).index(selected_section) + 1
 
     # عرض تاريخ آخر تحديث من الشيت
