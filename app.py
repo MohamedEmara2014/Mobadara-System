@@ -3,76 +3,82 @@ import pandas as pd
 import requests
 import json
 
-# 1. إعدادات الصفحة للعرض العريض (مناسب للجداول)
-st.set_page_config(page_title="متابعة المبادرة - تحديث الأقسام", layout="wide")
+# 1. إعدادات الصفحة
+st.set_page_config(page_title="التقرير اليومي للمبادرة", layout="wide")
 
-# 2. الروابط المحدثة
+# 2. الروابط
 SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzM8gX9uZz9CXTi1zsBH1qO3-4vAfnn8wRhv8wzqg7RXlv2roPYpOupEDOW3oCzVcI/exec"
 SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1YDgqz1oi8Yi56DFFp03LlMWhmJxo1MeuSN_2hGSB2EM/export?format=csv"
 
 st.title("📂 التقرير اليومي لمتابعة المبادرة")
-st.info("اختر قسمك، عدل البيانات في الجدول، ثم اضغط 'اعتماد التحديثات' لإرسال الكل دفعة واحدة.")
+
+# --- وظيفة تفريغ الخانات ---
+if 'table_key' not in st.session_state:
+    st.session_state.table_key = 0
+
+def clear_table():
+    st.session_state.table_key += 1 # تغيير المفتاح يجبر التيبول على إعادة التحميل فارغاً
 
 try:
-    # جلب البيانات الحالية
+    # جلب البيانات
     df = pd.read_csv(SHEET_CSV_URL, dtype=str).fillna("")
-
-    # --- الخطوة 1: اختيار القسم ---
-    # نفترض أن العمود الأول هو أسماء المشاريع والبقية هي الأقسام
     project_col = df.columns[0]
     sections = df.columns[1:]
     
-    selected_section = st.selectbox("🎯 اختر القسم الخاص بك:", sections)
+    selected_section = st.selectbox("🎯 حدد القسم الخاص بك:", sections)
     col_idx = list(df.columns).index(selected_section) + 1
 
-    # --- الخطوة 2: محرر البيانات التفاعلي ---
-    st.subheader(f"📊 جدول تحديثات قسم: {selected_section}")
-    
-    # تجهيز جدول فرعي للعرض والتعديل فقط
-    # يحتوي على اسم المشروع والعمود الخاص بالقسم المختار فقط
+    st.markdown(f"### 📊 جدول تحديثات: {selected_section}")
+
+    # تحضير نسخة فارغة من العمود إذا طلب المستخدم المسح
     display_df = df[[project_col, selected_section]].copy()
-    
+
+    # استخدام مفتاح (key) ديناميكي للتحكم في إعادة ضبط الجدول
     edited_df = st.data_editor(
         display_df,
+        key=f"editor_{st.session_state.table_key}", 
         column_config={
             project_col: st.column_config.TextColumn("اسم المشروع", disabled=True),
-            selected_section: st.column_config.TextColumn(f"الموقف الحالي لـ {selected_section}", width="large")
+            selected_section: st.column_config.TextColumn(f"الموقف التنفيذي - {selected_section}", width="large")
         },
         hide_index=True,
         use_container_width=True,
-        height=500
+        height=600
     )
 
-    # --- الخطوة 3: زر الإرسال الجماعي ---
-    st.divider()
-    if st.button(f"🚀 اعتماد وإرسال كافة تحديثات {selected_section}", type="primary"):
-        updates_to_send = []
-        
-        # مقارنة الجدول المعدل بالقديم لاستخراج التغييرات فقط
-        for i in range(len(df)):
-            new_val = edited_df.iloc[i, 1]
-            old_val = df.iloc[i, col_idx - 1]
+    # --- أزرار التحكم ---
+    col_btn1, col_btn2 = st.columns([1, 4]) # تقسيم المساحة بين الزرين
+    
+    with col_btn1:
+        # زر المسح (باللون الأحمر للتحذير)
+        if st.button("🗑️ تفريغ كافة الخانات", use_container_width=True, on_click=clear_table):
+            st.rerun()
+
+    with col_btn2:
+        # زر الاعتماد (باللون الأخضر)
+        if st.button(f"🚀 اعتماد وتصدير التقرير اليومي لـ {selected_section}", type="primary", use_container_width=True):
+            updates_to_send = []
             
-            if str(new_val).strip() != str(old_val).strip():
+            for i in range(len(edited_df)):
+                val = edited_df.iloc[i, 1]
                 updates_to_send.append({
-                    "row": i + 2, # +2 لتعويض سطر العناوين وبدء العد من 1 في جوجل
+                    "row": i + 2,
                     "col": col_idx,
-                    "val": str(new_val)
+                    "val": str(val) if val else "" 
                 })
-        
-        if updates_to_send:
-            with st.spinner(f"جاري مزامنة {len(updates_to_send)} تحديثاً مع ملف المدير العام..."):
-                # إرسال التحديثات كـ JSON لتوافق الكود الجديد في Apps Script
-                params = {"updates": json.dumps(updates_to_send)}
-                response = requests.get(SCRIPT_URL, params=params)
-                
-                if response.status_code == 200:
-                    st.success(f"✅ تم تحديث {len(updates_to_send)} خلية بنجاح في ملف المدير العام!")
-                    st.balloons()
-                else:
-                    st.error("❌ حدث خطأ في السيرفر. تأكد من إعدادات الـ Deployment.")
-        else:
-            st.warning("⚠️ لم تقم بإجراء أي تغييرات في الجدول لإرسالها.")
+            
+            if updates_to_send:
+                with st.spinner("جاري تهيئة القسم وتحديث البيانات..."):
+                    params = {"updates": json.dumps(updates_to_send)}
+                    response = requests.get(SCRIPT_URL, params=params)
+                    
+                    if response.status_code == 200:
+                        st.success("✅ تم مسح القديم وتحديث التقرير اليومي بنجاح!")
+                        st.balloons()
+                    else:
+                        st.error("❌ فشل الاتصال. تأكد من رابط الـ Web App.")
+            else:
+                st.warning("⚠️ الجدول فارغ، لا يوجد بيانات لإرسالها.")
 
 except Exception as e:
-    st.error(f"حدث خطأ غير متوقع: {e}")
+    st.error(f"حدث خطأ: {e}")
