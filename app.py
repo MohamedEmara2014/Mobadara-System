@@ -10,7 +10,7 @@ st.set_page_config(page_title="مصفوفة المبادرة - تحديث الأ
 SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzM8gX9uZz9CXTi1zsBH1qO3-4vAfnn8wRhv8wzqg7RXlv2roPYpOupEDOW3oCzVcI/exec"
 SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1YDgqz1oi8Yi56DFFp03LlMWhmJxo1MeuSN_2hGSB2EM/export?format=csv"
 
-st.title("📂 نظام تحديث مصفوفة الأقسام (الـ 26 مشروعاً)")
+st.title("📂 التقرير اليومي لمتابعة المبادرة")
 st.info("اختر قسمك، عدل البيانات في الجدول، ثم اضغط 'اعتماد التحديثات' لإرسال الكل دفعة واحدة.")
 
 try:
