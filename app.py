@@ -6,18 +6,21 @@ import json
 # 1. إعدادات الصفحة
 st.set_page_config(page_title="التقرير اليومي للمبادرة", layout="wide")
 
-# 2. الروابط
+# 2. الروابط الأساسية
 SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzM8gX9uZz9CXTi1zsBH1qO3-4vAfnn8wRhv8wzqg7RXlv2roPYpOupEDOW3oCzVcI/exec"
 SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1YDgqz1oi8Yi56DFFp03LlMWhmJxo1MeuSN_2hGSB2EM/export?format=csv"
 
 st.title("📂 التقرير اليومي لمتابعة المبادرة")
 
-# --- وظيفة تفريغ الخانات ---
-if 'table_key' not in st.session_state:
-    st.session_state.table_key = 0
+# --- منطق إعادة ضبط الجدول (Reset Logic) ---
+if 'count' not in st.session_state:
+    st.session_state.count = 0
 
-def clear_table():
-    st.session_state.table_key += 1 # تغيير المفتاح يجبر التيبول على إعادة التحميل فارغاً
+def reset_table():
+    st.session_state.count += 1
+    # مسح الذاكرة المؤقتة للجدول لضمان التفريغ الحقيقي
+    if f"editor_{st.session_state.count-1}" in st.session_state:
+        del st.session_state[f"editor_{st.session_state.count-1}"]
 
 try:
     # جلب البيانات
@@ -25,18 +28,22 @@ try:
     project_col = df.columns[0]
     sections = df.columns[1:]
     
-    selected_section = st.selectbox("🎯 حدد القسم الخاص بك:", sections)
+    # تحديث العبارة التوجيهية بناءً على طلبك
+    instruction_text = "🎯 حدد القسم الخاص بك ثم اضغط اعتماد وتصدير البيانات أسفل الصفحة:"
+    selected_section = st.selectbox(instruction_text, sections)
     col_idx = list(df.columns).index(selected_section) + 1
 
     st.markdown(f"### 📊 جدول تحديثات: {selected_section}")
 
-    # تحضير نسخة فارغة من العمود إذا طلب المستخدم المسح
+    # تحضير البيانات للعرض
     display_df = df[[project_col, selected_section]].copy()
 
-    # استخدام مفتاح (key) ديناميكي للتحكم في إعادة ضبط الجدول
+    # استخدام مفتاح ديناميكي يتغير عند الضغط على زر المسح
+    current_key = f"editor_{st.session_state.count}"
+    
     edited_df = st.data_editor(
         display_df,
-        key=f"editor_{st.session_state.table_key}", 
+        key=current_key,
         column_config={
             project_col: st.column_config.TextColumn("اسم المشروع", disabled=True),
             selected_section: st.column_config.TextColumn(f"الموقف التنفيذي - {selected_section}", width="large")
@@ -47,18 +54,18 @@ try:
     )
 
     # --- أزرار التحكم ---
-    col_btn1, col_btn2 = st.columns([1, 4]) # تقسيم المساحة بين الزرين
+    col_btn1, col_btn2 = st.columns([1, 3])
     
     with col_btn1:
-        # زر المسح (باللون الأحمر للتحذير)
-        if st.button("🗑️ تفريغ كافة الخانات", use_container_width=True, on_click=clear_table):
+        # زر المسح: يستدعي وظيفة reset_table لإعادة بناء الجدول ببيانات فارغة
+        if st.button("🗑️ تفريغ كافة الخانات", use_container_width=True, on_click=reset_table):
             st.rerun()
 
     with col_btn2:
-        # زر الاعتماد (باللون الأخضر)
         if st.button(f"🚀 اعتماد وتصدير التقرير اليومي لـ {selected_section}", type="primary", use_container_width=True):
             updates_to_send = []
             
+            # استخراج البيانات من الجدول المعدل
             for i in range(len(edited_df)):
                 val = edited_df.iloc[i, 1]
                 updates_to_send.append({
@@ -68,17 +75,17 @@ try:
                 })
             
             if updates_to_send:
-                with st.spinner("جاري تهيئة القسم وتحديث البيانات..."):
+                with st.spinner("جاري مسح القديم وتحديث البيانات الجديدة..."):
                     params = {"updates": json.dumps(updates_to_send)}
                     response = requests.get(SCRIPT_URL, params=params)
                     
                     if response.status_code == 200:
-                        st.success("✅ تم مسح القديم وتحديث التقرير اليومي بنجاح!")
+                        st.success("✅ تم تحديث التقرير بنجاح في ملف الإدارة!")
                         st.balloons()
                     else:
-                        st.error("❌ فشل الاتصال. تأكد من رابط الـ Web App.")
+                        st.error("❌ فشل الاتصال بالسيرفر، تأكد من إعدادات الـ Deployment.")
             else:
-                st.warning("⚠️ الجدول فارغ، لا يوجد بيانات لإرسالها.")
+                st.warning("⚠️ لا توجد بيانات لإرسالها.")
 
 except Exception as e:
-    st.error(f"حدث خطأ: {e}")
+    st.error(f"خطأ تقني: {e}")
