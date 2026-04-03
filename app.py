@@ -4,7 +4,7 @@ import requests
 import json
 
 # 1. إعدادات الصفحة للعرض العريض (مناسب للجداول)
-st.set_page_config(page_title="مصفوفة المبادرة - تحديث الأقسام", layout="wide")
+st.set_page_config(page_title="متابعة المبادرة - تحديث الأقسام", layout="wide")
 
 # 2. الروابط المحدثة
 SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzM8gX9uZz9CXTi1zsBH1qO3-4vAfnn8wRhv8wzqg7RXlv2roPYpOupEDOW3oCzVcI/exec"
