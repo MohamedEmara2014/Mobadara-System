@@ -4,47 +4,52 @@ import requests
 import json
 import time
 
-# 1. إعدادات الصفحة
 st.set_page_config(page_title="التقرير اليومي للمبادرة", layout="wide")
 
-# 2. الرابط الجديد الذي أرسلته (تم التحديث)
 SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKryaebBnTZTOp1NIul4VS1SSaslq5TH_jDDEfCq77Ef1NZ21F0IDWYrt5NYJkgDwg/exec"
 SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1YDgqz1oi8Yi56DFFp03LlMWhmJxo1MeuSN_2hGSB2EM/export?format=csv"
 
 st.title("📂 التقرير اليومي لمتابعة المبادرة")
 
 try:
-    # جلب البيانات مباشرة
+    # جلب البيانات - مع مراعاة أن الصف الأول هو أسماء الأقسام
     df_raw = pd.read_csv(SHEET_CSV_URL, dtype=str).fillna("")
-    sections = df_raw.columns[1:]
     
-    selected_section = st.selectbox("🎯 حدد القسم الخاص بك ثم اضغط اعتماد وتصدير البيانات أسفل الصفحة:", sections)
-    col_idx = list(df_raw.columns).index(selected_section) + 1
+    # قائمة الأقسام (نأخذ الأسماء من الصف الأول في الشيت - Headers)
+    # ملاحظة: بما أن الأقسام مدمجة، سنأخذ الأعمدة الفردية (1, 3, 5...)
+    all_cols = df_raw.columns
+    sections = [all_cols[i] for i in range(1, len(all_cols), 2)]
+    
+    selected_section = st.selectbox("🎯 حدد القسم الخاص بك:", sections)
+    
+    # تحديد مكان الأعمدة في الشيت
+    col_idx_done = list(df_raw.columns).index(selected_section) + 1
+    col_idx_issues = col_idx_done + 1 # العمود الذي يليه مباشرة هو المعوقات
 
-    # عرض تاريخ آخر تحديث من الشيت
-    last_update_val = df_raw.iloc[0, col_idx - 1]
-    
+    # عرض تاريخ آخر تحديث (موجود في الصف الأول من الداتا، أي الصف 2 في الشيت)
+    last_update_val = df_raw.iloc[0, col_idx_done - 1]
     if "تحديث:" in str(last_update_val):
         st.success(f"📅 {last_update_val}")
-    else:
-        st.warning("⚠️ لم يتم تسجيل تحديثات لهذا القسم اليوم بعد.")
 
-    st.markdown(f"### 📊 جدول تحديثات: {selected_section}")
+    st.markdown(f"### 📊 تحديثات قسم: {selected_section}")
 
-    # تحضير أسماء المشاريع (تبدأ من الصف 3 في الشيت)
-    project_names = df_raw.iloc[1:, 0]
+    # أسماء المشاريع تبدأ من الصف الثالث في الداتا (أي الصف 4 في الشيت)
+    project_names = df_raw.iloc[1:, 0] 
 
-    empty_display_df = pd.DataFrame({
-        df_raw.columns[0]: project_names,
-        selected_section: "" 
+    # إنشاء جدول الإدخال بخانتين
+    input_df = pd.DataFrame({
+        "اسم المشروع": project_names,
+        "ما تم إنجازه": "",
+        "المعوقات والمشاكل": ""
     })
 
     edited_df = st.data_editor(
-        empty_display_df,
+        input_df,
         key=f"editor_{selected_section}",
         column_config={
-            df_raw.columns[0]: st.column_config.TextColumn("اسم المشروع", disabled=True),
-            selected_section: st.column_config.TextColumn(f"الموقف التنفيذي الجديد", width="large")
+            "اسم المشروع": st.column_config.TextColumn("اسم المشروع", disabled=True),
+            "ما تم إنجازه": st.column_config.TextColumn("التنفيذ الفعلي", width="medium"),
+            "المعوقات والمشاكل": st.column_config.TextColumn("المعوقات", width="medium")
         },
         hide_index=True,
         use_container_width=True,
@@ -53,29 +58,23 @@ try:
 
     if st.button(f"🚀 اعتماد وتصدير بيانات {selected_section}", type="primary", use_container_width=True):
         updates_to_send = []
-        # i + 3 للبدء من صف المشاريع الفعلي
         for i in range(len(edited_df)):
-            val = edited_df.iloc[i, 1]
-            updates_to_send.append({
-                "row": i + 3, 
-                "col": col_idx,
-                "val": str(val) if val else "" 
-            })
+            val_done = edited_df.iloc[i, 1]
+            val_issues = edited_df.iloc[i, 2]
+            
+            # إرسال للعمود الأول (إنجاز) وللعمود الثاني (معوقات)
+            # الصف يبدأ من i + 4 لأن عندنا (1: عناوين، 2: تاريخ، 3: مسميات الأعمدة)
+            updates_to_send.append({"row": i + 4, "col": col_idx_done, "val": str(val_done) if val_done else ""})
+            updates_to_send.append({"row": i + 4, "col": col_idx_issues, "val": str(val_issues) if val_issues else ""})
         
         if updates_to_send:
-            with st.spinner("جاري المزامنة..."):
+            with st.spinner("جاري الإرسال للمنظومة..."):
                 params = {"updates": json.dumps(updates_to_send)}
                 response = requests.get(SCRIPT_URL, params=params)
-                
                 if response.status_code == 200:
-                    st.success("✅ تم التحديث بنجاح!")
+                    st.success("✅ تم الاعتماد بنجاح!")
                     st.balloons()
-                    time.sleep(2) # انتظار لمشاهدة البالونات
+                    time.sleep(2)
                     st.rerun()
-                else:
-                    st.error("❌ فشل الاتصال. تأكد من إعدادات النشر (Deploy) في Apps Script.")
-        else:
-            st.warning("⚠️ يرجى إدخال البيانات أولاً.")
-
 except Exception as e:
-    st.error(f"خطأ: {e}")
+    st.error(f"تأكد من تنسيق الشيت (عمودين لكل قسم). الخطأ: {e}")
