@@ -19,7 +19,7 @@ try:
     all_cols = df_raw.columns
     sections = [all_cols[i] for i in range(1, len(all_cols), 2) if "Unnamed" not in all_cols[i]]
     
-    selected_section = st.selectbox("🎯 حدد القسم الخاص بك:", sections)
+    selected_section = st.selectbox("🎯  حدد القسم الخاص بك ثم اضغط اعتماد وتصدير البيانات أسفل الصفحة:", sections)
     
     col_idx_done = list(df_raw.columns).index(selected_section) + 1
     col_idx_issues = col_idx_done + 1 
