@@ -4,49 +4,41 @@ import requests
 import json
 import time
 
-# 1. إعدادات الصفحة
 st.set_page_config(page_title="التقرير اليومي للمبادرة", layout="wide")
 
-# 2. الرابط الجديد الذي قمت بتزويدي به
+# الرابط الجديد الخاص بك
 SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwE9XcpdsumPSoGJ0G_apcTbnRLj1zLPPVR8MVZRGANBwVGYtn0vavLJTabfY_Fda0/exec"
 SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1YDgqz1oi8Yi56DFFp03LlMWhmJxo1MeuSN_2hGSB2EM/export?format=csv"
 
 st.title("📂 التقرير اليومي لمتابعة المبادرة")
 
 try:
-    # جلب البيانات من جوجل شيتس
+    # جلب البيانات
     df_raw = pd.read_csv(SHEET_CSV_URL, dtype=str).fillna("")
     
-    # استخراج أسماء الأقسام (كل قسم يغطي عمودين)
     all_cols = df_raw.columns
     sections = [all_cols[i] for i in range(1, len(all_cols), 2) if "Unnamed" not in all_cols[i]]
     
-    selected_section = st.selectbox("🎯 حدد القسم الخاص بك ثم اضغط اعتماد وتصدير البيانات أسفل الصفحة:", sections)
+    # العبارة كما طلبتها تماماً دون تغيير
+    selected_section = st.selectbox("حدد القسم الخاص بك واضغط اعتماد وتصدير البيانات أخر الصفحة", sections)
     
-    # تحديد أرقام الأعمدة (الإنجاز والمعوقات)
     col_idx_done = list(df_raw.columns).index(selected_section) + 1
     col_idx_issues = col_idx_done + 1 
 
-    # عرض تاريخ آخر تحديث من الشيت
+    # عرض تاريخ التحديث
     last_update_val = df_raw.iloc[0, col_idx_done - 1]
     if "تحديث:" in str(last_update_val):
         st.success(f"📅 {last_update_val}")
-    else:
-        st.warning("⚠️ لم يتم تسجيل تحديثات لهذا القسم اليوم بعد.")
 
-    st.markdown(f"### 📝 جدول إدخال بيانات: {selected_section}")
+    # قراءة أسماء المشاريع (تبدأ من الصف الرابع في الشيت)
+    project_names = df_raw.iloc[2:, 0].values.tolist()
 
-    # قراءة أسماء المشاريع (تلقائياً مهما كان عددها)
-    project_names = df_raw.iloc[2:, 0].tolist() 
-
-    # بناء هيكل الجدول
     input_df = pd.DataFrame({
         "اسم المشروع": project_names,
         "ما تم إنجازه": "",
         "المعوقات والمشاكل": ""
     })
 
-    # عرض محرر البيانات بـ 3 أعمدة متجاورة
     edited_df = st.data_editor(
         input_df,
         key=f"editor_{selected_section}",
@@ -57,40 +49,34 @@ try:
         },
         hide_index=True,
         use_container_width=True,
-        height=600 # ارتفاع مناسب لـ 38 مشروعاً
+        height=600 
     )
 
-    st.divider()
-
-    # زر الاعتماد والتصدير
     if st.button(f"🚀 اعتماد وتصدير بيانات {selected_section}", type="primary", use_container_width=True):
         updates_to_send = []
         
         for i in range(len(edited_df)):
-            val_done = edited_df.iloc[i, 1]
-            val_issues = edited_df.iloc[i, 2]
+            val_done = str(edited_df.iloc[i, 1]).strip()
+            val_issues = str(edited_df.iloc[i, 2]).strip()
             
-            # إرسال البيانات للصفوف ابتداءً من الصف 4
-            target_row = i + 4
-            
-            updates_to_send.append({"row": target_row, "col": col_idx_done, "val": str(val_done) if val_done else ""})
-            updates_to_send.append({"row": target_row, "col": col_idx_issues, "val": str(val_issues) if val_issues else ""})
+            # نرسل فقط الصفوف التي تحتوي على بيانات (هذا يمنع الكتابة العشوائية فوق العناوين)
+            if val_done or val_issues:
+                target_row = i + 4 # المشروع الأول i=0 يذهب للصف 4
+                
+                updates_to_send.append({"row": target_row, "col": col_idx_done, "val": val_done})
+                updates_to_send.append({"row": target_row, "col": col_idx_issues, "val": val_issues})
         
         if updates_to_send:
-            with st.spinner("جاري المزامنة مع الرابط الجديد..."):
+            with st.spinner("جاري المزامنة..."):
                 params = {"updates": json.dumps(updates_to_send)}
-                # استخدام الرابط الجديد
                 response = requests.get(SCRIPT_URL, params=params)
-                
                 if response.status_code == 200:
-                    st.success(f"✅ تم الاعتماد بنجاح لـ {len(project_names)} مشروعاً!")
+                    st.success("✅ تم التحديث بنجاح!")
                     st.balloons()
                     time.sleep(1)
                     st.rerun()
-                else:
-                    st.error("❌ فشل الاتصال بالرابط الجديد. تأكد من إعدادات النشر (Anyone).")
         else:
-            st.warning("⚠️ يرجى ملء الجدول أولاً.")
+            st.warning("⚠️ يرجى كتابة أي بيانات في الجدول أولاً قبل الضغط على اعتماد.")
 
 except Exception as e:
-    st.error(f"حدث خطأ في النظام: {e}")
+    st.error(f"حدث خطأ: {e}")
