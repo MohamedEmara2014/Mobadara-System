@@ -102,6 +102,7 @@ try:
             with st.spinner("جاري المزامنة..."):
                 params = {"updates": json.dumps(updates_to_send)}
                 response = requests.get(SCRIPT_URL, params=params)
+                st.error(f"تفاصيل الخطأ: {response.status_code} - {response.text}")
                 
                 if response.status_code == 200:
                     send_telegram_msg(selected_section, upload_method)
