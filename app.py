@@ -5,7 +5,7 @@ import json
 import time
 import io
 
-# --- 1. إعدادات التليجرام ---
+# --- 1. إعدادات الأمان والتواصل (تليجرام) ---
 TELEGRAM_TOKEN = "8574934082:AAFaRPpZT8a86wGLKb8C_ZqLR3jZ1xx7Gt0"
 TELEGRAM_CHAT_ID = "303528498" 
 
@@ -25,7 +25,8 @@ def send_telegram_msg(section_name, method="يدوي"):
 # --- 2. إعدادات واجهة التطبيق ---
 st.set_page_config(page_title="التقرير اليومي لمتابعة المبادرة", layout="wide")
 
-SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwE9XcpdsumPSoGJ0G_apcTbnRLj1zLPPVR8MVZRGANBwVGYtn0vavLJTabfY_Fda0/exec"
+# الرابط الجديد الذي زودتني به
+SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyvNeUALnqFg-vv8LkLhb1ND-OYl-2xdMCY95VFevp4130MSHMlP3781h1Q-pOy0nei/exec"
 SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1YDgqz1oi8Yi56DFFp03LlMWhmJxo1MeuSN_2hGSB2EM/export?format=csv"
 
 st.title("📂 التقرير اليومي لمتابعة المبادرة")
@@ -55,7 +56,6 @@ try:
     # --- 5. ركن الملفات (تحميل ورفع) في الشريط الجانبي ---
     st.sidebar.header("📂 إدارة ملفات الإكسيل")
     
-    # أ. توليد نموذج التحميل بناءً على المشاريع الحالية
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
         display_df.to_excel(writer, index=False, sheet_name='التقرير')
@@ -69,7 +69,6 @@ try:
     
     st.sidebar.divider()
 
-    # ب. رفع الملف المكتمل
     uploaded_file = st.sidebar.file_uploader("📤 ارفع الملف المكتمل هنا", type=["xlsx"])
     
     update_method = "يدوي"
@@ -102,7 +101,7 @@ try:
 
     st.divider()
 
-    # 7. زر الاعتماد والإرسال
+    # 7. زر الاعتماد والإرسال (باستخدام POST لتجنب خطأ 400)
     if st.button(f"🚀 اعتماد وتصدير بيانات {selected_section}", type="primary", use_container_width=True):
         updates_to_send = []
         for i in range(len(edited_df)):
@@ -113,18 +112,22 @@ try:
             updates_to_send.append({"row": target_row, "col": col_idx_issues, "val": val_issues})
         
         if updates_to_send:
-            with st.spinner("جاري المزامنة وإرسال الإشعار..."):
-                params = {"updates": json.dumps(updates_to_send)}
-                response = requests.get(SCRIPT_URL, params=params, timeout=30)
+            with st.spinner("جاري المزامنة عبر POST وإرسال الإشعار..."):
+                # تحويل البيانات إلى JSON لإرسالها في جسم الطلب
+                payload = json.dumps({"updates": updates_to_send})
                 
-                if response.status_code == 200:
+                # استخدام POST بدلاً من GET لتجنب حدود طول الرابط
+                response = requests.post(SCRIPT_URL, data=payload, timeout=60)
+                
+                if response.status_code == 200 and "Success" in response.text:
                     send_telegram_msg(selected_section, update_method)
-                    st.success("✅ تم الحفظ بنجاح!")
+                    st.success("✅ تم حفظ البيانات بنجاح!")
                     st.balloons()
                     time.sleep(1)
                     st.rerun()
                 else:
-                    st.error(f"❌ فشل الاتصال: {response.status_code} - {response.text}")
+                    st.error(f"❌ فشل الاتصال: {response.status_code}")
+                    st.code(response.text) # سيظهر لك تفاصيل رد الخادم
         else:
             st.warning("⚠️ لا توجد بيانات لإرسالها.")
 
