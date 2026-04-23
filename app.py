@@ -4,18 +4,22 @@ import requests
 import json
 import time
 import io
+from datetime import datetime
 
-# --- 1. إعدادات الأمان والتواصل (تليجرام) ---
+# --- 1. إعدادات التليجرام (يفضل وضعها في Secrets للأمان) ---
 TELEGRAM_TOKEN = "8574934082:AAFaRPpZT8a86wGLKb8C_ZqLR3jZ1xx7Gt0"
 TELEGRAM_CHAT_ID = "303528498" 
 
 def send_telegram_msg(section_name, method="يدوي"):
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+        curr_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         text = (
             f"🏗️ **تنبيه تحديث جديد**\n\n"
-            f"قام قسم: \n📍 *{section_name}*\n\n"
-            f"باعتماد وتصدير البيانات الآن عبر (تحديث {method}). ✅"
+            f"📍 القسم: *{section_name}*\n"
+            f"🛠️ الوسيلة: *{method}*\n"
+            f"⏰ الوقت: *{curr_time}*\n\n"
+            f"✅ تم الاعتماد وحفظ البيانات بنجاح."
         )
         payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "Markdown"}
         requests.post(url, data=payload, timeout=10)
@@ -25,111 +29,94 @@ def send_telegram_msg(section_name, method="يدوي"):
 # --- 2. إعدادات واجهة التطبيق ---
 st.set_page_config(page_title="التقرير اليومي لمتابعة المبادرة", layout="wide")
 
-# الرابط الجديد الذي زودتني به
 SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyvNeUALnqFg-vv8LkLhb1ND-OYl-2xdMCY95VFevp4130MSHMlP3781h1Q-pOy0nei/exec"
 SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1YDgqz1oi8Yi56DFFp03LlMWhmJxo1MeuSN_2hGSB2EM/export?format=csv"
 
 st.title("📂 التقرير اليومي لمتابعة المبادرة")
 
 try:
-    # 3. جلب البيانات من جوجل شيتس
-    df_raw = pd.read_csv(SHEET_CSV_URL, dtype=str).fillna("")
+    # 3. جلب البيانات (استخدام كاش بسيط لتحسين الأداء)
+    @st.cache_data(ttl=60)
+    def load_data():
+        return pd.read_csv(SHEET_CSV_URL, dtype=str).fillna("")
+
+    df_raw = load_data()
     all_cols = df_raw.columns
     sections = [all_cols[i] for i in range(1, len(all_cols), 2) if "Unnamed" not in all_cols[i]]
     
     # 4. اختيار القسم
-    selected_section = st.selectbox("حدد القسم الخاص بك واضغط اعتماد وتصدير البيانات أخر الصفحة", sections)
+    selected_section = st.selectbox("حدد القسم الخاص بك:", sections)
     
     col_idx_done = list(df_raw.columns).index(selected_section) + 1
     col_idx_issues = col_idx_done + 1 
 
-    project_names = df_raw.iloc[2:, 0].values.tolist()
-    current_done_values = df_raw.iloc[2:, col_idx_done - 1].values.tolist()
-    current_issues_values = df_raw.iloc[2:, col_idx_issues - 1].values.tolist()
+    # --- عرض التاريخ من الصف الثاني ---
+    # ملاحظة: iloc[0] في باندا تعني الصف رقم 2 في الإكسيل (بعد العناوين)
+    last_update_val = df_raw.iloc[0, col_idx_done - 1] 
+    if last_update_val and "تحديث" in str(last_update_val):
+        st.info(f"🕒 {last_update_val}")
+    else:
+        st.warning("⚠️ لا يوجد تاريخ تحديث مسجل لهذا القسم حالياً.")
 
+    # 5. تجهيز الجدول
+    project_names = df_raw.iloc[2:, 0].values.tolist()
     display_df = pd.DataFrame({
         "اسم المشروع": project_names,
-        "ما تم إنجازه": current_done_values,
-        "المعوقات والمشاكل": current_issues_values
+        "ما تم إنجازه": df_raw.iloc[2:, col_idx_done - 1].values.tolist(),
+        "المعوقات والمشاكل": df_raw.iloc[2:, col_idx_issues - 1].values.tolist()
     })
 
-    # --- 5. ركن الملفات (تحميل ورفع) في الشريط الجانبي ---
-    st.sidebar.header("📂 إدارة ملفات الإكسيل")
-    
-    buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-        display_df.to_excel(writer, index=False, sheet_name='التقرير')
-    
-    st.sidebar.download_button(
-        label="⬇️ تحميل نموذج الإكسيل الفارغ",
-        data=buffer.getvalue(),
-        file_name=f"نموذج_تقرير_{selected_section}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-    
-    st.sidebar.divider()
+    # --- 6. الجانب الجانبي (تحميل ورفع الملفات) ---
+    with st.sidebar:
+        st.header("📤 خيارات الإكسيل")
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+            display_df.to_excel(writer, index=False)
+        st.download_button("⬇️ تحميل النموذج الحالي", buffer.getvalue(), f"نموذج_{selected_section}.xlsx")
+        
+        st.divider()
+        uploaded_file = st.file_uploader("📤 رفع ملف بعد التعديل", type=["xlsx"])
+        
+    update_method = "يدوي (أونلاين)"
+    if uploaded_file:
+        excel_data = pd.read_excel(uploaded_file, engine='openpyxl', dtype=str).fillna("")
+        if len(excel_data) >= len(project_names):
+            display_df["ما تم إنجازه"] = excel_data.iloc[:len(project_names), 1].values
+            display_df["المعوقات والمشاكل"] = excel_data.iloc[:len(project_names), 2].values
+            update_method = "ملف إكسيل"
+            st.sidebar.success("✅ تم استيراد الملف للجدول")
 
-    uploaded_file = st.sidebar.file_uploader("📤 ارفع الملف المكتمل هنا", type=["xlsx"])
-    
-    update_method = "يدوي"
-    if uploaded_file is not None:
-        try:
-            excel_data = pd.read_excel(uploaded_file, engine='openpyxl', dtype=str).fillna("")
-            if len(excel_data) >= len(project_names):
-                display_df["ما تم إنجازه"] = excel_data.iloc[:len(project_names), 1].values
-                display_df["المعوقات والمشاكل"] = excel_data.iloc[:len(project_names), 2].values
-                st.sidebar.success("✅ تم تحديث الجدول من الملف!")
-                update_method = "ملف إكسيل"
-            else:
-                st.sidebar.error("❌ عدد الصفوف في الملف غير مطابق.")
-        except Exception as ex:
-            st.sidebar.error(f"⚠️ خطأ في القراءة: {ex}")
-
-    # 6. عرض محرر البيانات
+    # 7. عرض محرر البيانات
     edited_df = st.data_editor(
         display_df,
-        key=f"editor_{selected_section}",
-        column_config={
-            "اسم المشروع": st.column_config.TextColumn("🏗️ اسم المشروع", disabled=True),
-            "ما تم إنجازه": st.column_config.TextColumn("✅ ما تم إنجازه اليوم", width="large"),
-            "المعوقات والمشاكل": st.column_config.TextColumn("⚠️ المعوقات والمشاكل", width="large")
-        },
-        hide_index=True,
-        use_container_width=True,
-        height=600 
+        column_config={"اسم المشروع": st.column_config.TextColumn(disabled=True)},
+        use_container_width=True, hide_index=True, height=550
     )
 
-    st.divider()
-
-    # 7. زر الاعتماد والإرسال (باستخدام POST لتجنب خطأ 400)
+    # 8. زر الاعتماد والإرسال (POST)
     if st.button(f"🚀 اعتماد وتصدير بيانات {selected_section}", type="primary", use_container_width=True):
         updates_to_send = []
-        for i in range(len(edited_df)):
-            val_done = str(edited_df.iloc[i, 1]).strip()
-            val_issues = str(edited_df.iloc[i, 2]).strip()
-            target_row = i + 4
-            updates_to_send.append({"row": target_row, "col": col_idx_done, "val": val_done})
-            updates_to_send.append({"row": target_row, "col": col_idx_issues, "val": val_issues})
+        for i, row in edited_df.iterrows():
+            target_row = i + 4 # الحفاظ على مسافة العناوين والتاريخ
+            updates_to_send.append({"row": target_row, "col": col_idx_done, "val": str(row[1])})
+            updates_to_send.append({"row": target_row, "col": col_idx_issues, "val": str(row[2])})
         
         if updates_to_send:
-            with st.spinner("جاري المزامنة عبر POST وإرسال الإشعار..."):
-                # تحويل البيانات إلى JSON لإرسالها في جسم الطلب
+            with st.spinner("جاري الحفظ وتسجيل الوقت..."):
                 payload = json.dumps({"updates": updates_to_send})
-                
-                # استخدام POST بدلاً من GET لتجنب حدود طول الرابط
                 response = requests.post(SCRIPT_URL, data=payload, timeout=60)
                 
                 if response.status_code == 200 and "Success" in response.text:
                     send_telegram_msg(selected_section, update_method)
-                    st.success("✅ تم حفظ البيانات بنجاح!")
+                    st.success("✅ تم الحفظ وتحديث التاريخ بنجاح!")
                     st.balloons()
-                    time.sleep(1)
+                    st.cache_data.clear() # لمسح الكاش ورؤية التاريخ الجديد
+                    time.sleep(2)
                     st.rerun()
                 else:
                     st.error(f"❌ فشل الاتصال: {response.status_code}")
-                    st.code(response.text) # سيظهر لك تفاصيل رد الخادم
         else:
             st.warning("⚠️ لا توجد بيانات لإرسالها.")
 
 except Exception as e:
-    st.error(f"⚠️ خطأ في النظام: {e}")
+    st.error(f"⚠️ حدث خطأ في النظام: {e}")
