@@ -89,7 +89,7 @@ try:
             display_df,
             column_config={
                 "اسم المشروع": st.column_config.TextColumn("🏗️ اسم المشروع", disabled=True),
-                "ما تم إنجازه": st.column_config.TextColumn("✅ ما تم إنجازه اليوم", width="large"),
+                "ما تم إنجازه": st.column_config.TextColumn("✅ ما تم إنجازه خلال الأسبوع", width="large"),
                 "المعوقات والمشاكل": st.column_config.TextColumn("⚠️ المعوقات والمشاكل", width="large")
             },
             hide_index=True,
