@@ -32,7 +32,7 @@ def send_telegram_msg(section_name, method="يدوي"):
 
 # --- 3. واجهة التطبيق ---
 st.set_page_config(page_title="نظام متابعة المبادرة | الشئون القانونية وأقساط الجهاز", layout="wide")
-st.title("📂 التقرير اليومي لمتابعة المبادرة")
+st.title("📂 التقرير الأسبوعي لمتابعة المبادرة")
 
 try:
     @st.cache_data(ttl=10)
