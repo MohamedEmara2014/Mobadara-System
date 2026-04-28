@@ -136,10 +136,11 @@ try:
                     res = requests.post(SCRIPT_URL, data=json.dumps({"updates": updates}), timeout=60)
                     if "Success" in res.text:
                         send_telegram_msg(selected_section, update_method)
-                        st.success(f"✅ تم الحفظ بنجاح لـ {len(project_names)} مشروع.")
-                        st.cache_data.clear()
-                        time.sleep(1)
-                        st.rerun()
+                            st.success("✅ تم حفظ البيانات بنجاح")
+                            st.balloons()
+                            st.cache_data.clear()
+                            time.sleep(1)
+                            st.rerun()
 
 except Exception as e:
     st.error(f"⚠️ خطأ في النظام: {e}")
