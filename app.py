@@ -24,7 +24,7 @@ def send_telegram_msg(section_name, method="يدوي"):
             f"📍 القسم: *{section_name}*\n"
             f"🛠️ الوسيلة: *{method}*\n"
             f"⏰ الوقت: *{now}*\n\n"
-            f"✅ تم تحديث بيانات الـ 38 مشروعاً بنجاح."
+            f"✅ تم تحديث البيانات بنجاح."
         )
         payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "Markdown"}
         requests.post(url, data=payload, timeout=10)
@@ -33,7 +33,7 @@ def send_telegram_msg(section_name, method="يدوي"):
 
 # --- 3. واجهة التطبيق ---
 st.set_page_config(page_title="نظام متابعة المبادرة | المطور", layout="wide")
-st.title("📂 التقرير الأسبوعي لمتابعة المبادرة (38 مشروع)")
+st.title("📂 التقرير الأسبوعي لمتابعة مشروعات المبادرة")
 
 try:
     @st.cache_data(ttl=5)
