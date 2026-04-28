@@ -24,7 +24,7 @@ def send_telegram_msg(section_name, method="يدوي"):
             f"📍 القسم: *{section_name}*\n"
             f"🛠️ الوسيلة: *{method}*\n"
             f"⏰ الوقت: *{now}*\n\n"
-            f"✅ تم تحديث البيانات بنجاح."
+            f"✅ تم تحديث بيانات الـ 38 مشروعاً بنجاح."
         )
         payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "Markdown"}
         requests.post(url, data=payload, timeout=10)
@@ -32,8 +32,8 @@ def send_telegram_msg(section_name, method="يدوي"):
         pass
 
 # --- 3. واجهة التطبيق ---
-st.set_page_config(page_title="نظام متابعة المبادرة | الحسابات والإدارة", layout="wide")
-st.title("📂 التقرير الأسبوعي لمتابعة المبادرة")
+st.set_page_config(page_title="نظام متابعة المبادرة | المطور", layout="wide")
+st.title("📂 التقرير الأسبوعي لمتابعة المبادرة (38 مشروع)")
 
 try:
     @st.cache_data(ttl=5)
@@ -43,19 +43,17 @@ try:
     df_raw = load_data()
     all_cols = df_raw.columns
     
-    # استخراج الأقسام (تجاهل الأعمدة الفارغة والعمود الأول)
     sections = [col for col in all_cols if "Unnamed" not in col and col != all_cols[0]]
-    
     selected_section = st.selectbox("حدد القسم المختص للتحديث:", sections)
     
     if selected_section:
         col_idx_main = list(all_cols).index(selected_section)
         project_names = df_raw.iloc[2:, 0].values.tolist()
 
-        # --- منطق مخصص لقسم الحسابات ---
+        # --- منطق مخصص لقسم الحسابات (نظام 7 أعمدة، يظهر منها 6) ---
         if "الحسابات" in selected_section:
-            # ترتيب الأعمدة: 1.وارد العملاء، 2.صادر العملاء، 3.وارد التنفيذ، 4.صادر التنفيذ، 5.الرصيد (ونتجاهل 6.Action)
-            col_indices = [col_idx_main + 1, col_idx_main + 2, col_idx_main + 3, col_idx_main + 4, col_idx_main + 5]
+            # الفهارس: 1.وارد، 2.صادر، 3.وارد تنف، 4.صادر تنف، 5.رصيد، 6.تعليق (نتجاهل 7.Action)
+            col_indices = [col_idx_main + i for i in range(1, 7)]
             
             display_df = pd.DataFrame({
                 "المشروع": project_names,
@@ -63,19 +61,16 @@ try:
                 "صادر العملاء": df_raw.iloc[2:, col_indices[1]-1].values.tolist(),
                 "وارد التنفيذ": df_raw.iloc[2:, col_indices[2]-1].values.tolist(),
                 "صادر التنفيذ": df_raw.iloc[2:, col_indices[3]-1].values.tolist(),
-                "الرصيد": df_raw.iloc[2:, col_indices[4]-1].values.tolist()
+                "الرصيد": df_raw.iloc[2:, col_indices[4]-1].values.tolist(),
+                "التعليق": df_raw.iloc[2:, col_indices[5]-1].values.tolist()
             })
             
             column_config = {
                 "المشروع": st.column_config.TextColumn("🏗️ المشروع", disabled=True),
-                "وارد العملاء": st.column_config.TextColumn("📥 وارد عملاء"),
-                "صادر العملاء": st.column_config.TextColumn("📤 صادر عملاء"),
-                "وارد التنفيذ": st.column_config.TextColumn("📥 وارد تنفيذ"),
-                "صادر التنفيذ": st.column_config.TextColumn("📤 صادر تنفيذ"),
-                "الرصيد": st.column_config.TextColumn("⚖️ الرصيد الحالي")
+                "التعليق": st.column_config.TextColumn("💬 تعليق المحاسب", width="large")
             }
         else:
-            # النظام العادي لبقية الأقسام (إنجاز، معوقات، حالة)
+            # النظام العادي (إنجاز، معوقات، حالة - مع تجاهل عمود Action الرابع)
             col_indices = [col_idx_main + 1, col_idx_main + 2, col_idx_main + 3]
             
             display_df = pd.DataFrame({
@@ -87,8 +82,6 @@ try:
             
             column_config = {
                 "المشروع": st.column_config.TextColumn("🏗️ المشروع", disabled=True),
-                "ما تم انجازه خلال الأسبوع": st.column_config.TextColumn("✅ الموقف الحالي"),
-                "المعوقات والمشاكل": st.column_config.TextColumn("⚠️ المعوقات"),
                 "حالة الاتحاد": st.column_config.SelectboxColumn(
                     "📊 الحالة", 
                     options=["🟢 مكتمل", "🔵 قيد التنفيذ", "🟠 بانتظار مستندات", "🔴 متوقف / معلق"]
@@ -108,7 +101,7 @@ try:
             uploaded_file = st.file_uploader("رفع ملف إكسيل", type=["xlsx"])
             if uploaded_file:
                 excel_df = pd.read_excel(uploaded_file, engine='openpyxl', dtype=str).fillna("")
-                for col in display_df.columns[1:]: # تحديث كل الأعمدة عدا اسم المشروع
+                for col in display_df.columns[1:]:
                     display_df[col] = excel_df[col].values[:len(display_df)]
                 update_method = "ملف إكسيل"
                 st.sidebar.success("✅ تم دمج البيانات")
@@ -119,7 +112,7 @@ try:
             column_config=column_config,
             hide_index=True,
             use_container_width=True,
-            height=500
+            height=600 # زيادة الارتفاع ليناسب الـ 38 مشروعاً
         )
 
         st.divider()
@@ -129,18 +122,21 @@ try:
             for i, row in edited_df.iterrows():
                 target_row = i + 4
                 for idx, col_name in enumerate(display_df.columns[1:]):
+                    raw_val = row[col_name]
+                    # تنظيف البيانات من قيم nan
+                    clean_val = "" if pd.isna(raw_val) or str(raw_val).lower() == "nan" else str(raw_val).strip()
                     updates.append({
                         "row": target_row, 
                         "col": col_indices[idx], 
-                        "val": str(row[col_name]).strip()
+                        "val": clean_val
                     })
             
             if updates:
-                with st.spinner("جاري التحديث..."):
+                with st.spinner("جاري تحديث السجلات..."):
                     res = requests.post(SCRIPT_URL, data=json.dumps({"updates": updates}), timeout=60)
                     if "Success" in res.text:
                         send_telegram_msg(selected_section, update_method)
-                        st.success("✅ تم الحفظ بنجاح.")
+                        st.success(f"✅ تم الحفظ بنجاح لـ {len(project_names)} مشروع.")
                         st.cache_data.clear()
                         time.sleep(1)
                         st.rerun()
