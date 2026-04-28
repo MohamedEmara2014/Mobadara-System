@@ -44,7 +44,7 @@ try:
     all_cols = df_raw.columns
     
     sections = [col for col in all_cols if "Unnamed" not in col and col != all_cols[0]]
-    selected_section = st.selectbox("حدد القسم المختص للتحديث:", sections)
+    selected_section = st.selectbox(" حدد القسم المختص للتحديث ثم اضغط حفظ البيانات أسفل الصفحة:", sections)
     
     if selected_section:
         col_idx_main = list(all_cols).index(selected_section)
